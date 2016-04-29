@@ -94,20 +94,25 @@ public:
 
             return std::make_pair(data_fd, meta_fd);
         }
-        catch (...)
+        catch (const ExceptionBase& e)
         {
             if (data_fd >= 0)
             {
                 ::close(data_fd);
-                ::unlinkat(m_dir_fd, filename.c_str(), 0);
+                if (e.error_number() != EEXIST)
+                    ::unlinkat(m_dir_fd, filename.c_str(), 0);
             }
             if (meta_fd >= 0)
             {
                 ::close(meta_fd);
-                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+                if (e.error_number() != EEXIST)
+                    ::unlinkat(m_dir_fd, metaname.c_str(), 0);
             }
-            ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-            ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+            if (e.error_number() != EEXIST)
+            {
+                ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+                ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+            }
             throw;
         }
     }
@@ -180,19 +185,22 @@ public:
 
             return std::make_pair(data_fd, meta_fd);
         }
-        catch (...)
+        catch (const ExceptionBase& e)
         {
             if (data_fd >= 0)
             {
                 ::close(data_fd);
-                ::unlinkat(m_dir_fd, filename.c_str(), 0);
+                if (e.error_number() != EEXIST)
+                    ::unlinkat(m_dir_fd, filename.c_str(), 0);
             }
             if (meta_fd >= 0)
             {
                 ::close(meta_fd);
-                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+                if (e.error_number() != EEXIST)
+                    ::unlinkat(m_dir_fd, metaname.c_str(), 0);
             }
-            ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+            if (e.error_number() != EEXIST)
+                ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
             throw;
         }
     }
