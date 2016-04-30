@@ -523,17 +523,21 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     if (!xattr)
         return;
 
+#if defined(__APPLE__) || defined(__LINUX__)
 #ifdef __APPLE__
     auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
 #else
     auto rc = ::listxattr(underlying_path, nullptr, 0);
 #endif
     if (rc < 0)
-        return;    // The underlying filesystem does not support extended attributes
+    {
+        return;
+    }
     opt.listxattr = &securefs::operations::listxattr;
     opt.getxattr = &securefs::operations::getxattr;
     opt.setxattr = &securefs::operations::setxattr;
     opt.removexattr = &securefs::operations::removexattr;
+#endif
 }
 
 size_t try_read_password(void* password, size_t size)

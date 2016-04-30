@@ -123,14 +123,15 @@ void FileBase::flush()
     m_stream->flush();
 }
 
+#if defined(__APPLE__) || defined(__LINUX__)
 // The IV size is for historical reasons. Doesn't really matter.
 static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
 ssize_t FileBase::listxattr(char* buffer, size_t size)
 {
-#ifdef __APPLE__
+#if defined(__APPLE__)
     auto rc = ::flistxattr(file_descriptor(), buffer, size, 0);
-#else
+#elif defined(__LINUX__)
     auto rc = ::flistxattr(file_descriptor(), buffer, size);
 #endif
     if (rc < 0)
@@ -142,7 +143,7 @@ static ssize_t fgetxattr_wrapper(int fd, const char* name, void* value, size_t s
 {
 #ifdef __APPLE__
     return ::fgetxattr(fd, name, value, size, 0, 0);
-#else
+#elif defined(__LINUX__)
     return ::fgetxattr(fd, name, value, size);
 #endif
 }
@@ -196,7 +197,7 @@ static int fsetxattr_wrapper(int fd, const char* name, void* value, size_t size,
 {
 #ifdef __APPLE__
     return ::fsetxattr(fd, name, value, size, 0, flags);
-#else
+#elif defined(__LINUX__)
     return ::fsetxattr(fd, name, value, size, flags);
 #endif
 }
@@ -243,12 +244,27 @@ void FileBase::removexattr(const char* name)
 {
 #ifdef __APPLE__
     auto rc = ::fremovexattr(file_descriptor(), name, 0);
-#else
+#elif defined(__LINUX__)
     auto rc = ::fremovexattr(file_descriptor(), name);
 #endif
     if (rc < 0)
         throw OSException(errno);
 }
+#else
+ssize_t FileBase::listxattr(char* buffer, size_t size) { throw OSException(ENOTSUP); }
+
+ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
+{
+    throw OSException(ENOTSUP);
+}
+
+void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
+{
+    throw OSException(ENOTSUP);
+}
+
+void FileBase::removexattr(const char* name) { throw OSException(ENOTSUP); }
+#endif
 
 void SimpleDirectory::initialize()
 {

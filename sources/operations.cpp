@@ -859,6 +859,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
+#if defined(__APPLE__) || defined(__LINUX__)
     int listxattr(const char* path, char* list, size_t size)
     {
         COMMON_PROLOGUE
@@ -880,15 +881,13 @@ namespace operations
 
 #ifdef __APPLE__
 
-    static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
-
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
             fs->logger->log(LoggingLevel::DEBUG,
-                            fmt::format("path={} name={}", path, name),
+                            fmt::format("path={} name={} position={}", path, name, position),
                             __PRETTY_FUNCTION__,
                             __FILE__,
                             __LINE__);
@@ -914,18 +913,21 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(
-                LoggingLevel::DEBUG,
-                fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
-                __PRETTY_FUNCTION__,
-                __FILE__,
-                __LINE__);
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} name={} value={} position={}",
+                                        path,
+                                        name,
+                                        std::string(value, size),
+                                        position),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
 
         if (position != 0)
             return -EINVAL;
         if (strcmp(name, "com.apple.quarantine") == 0)
             return 0;    // workaround for the "XXX is damaged" bug on OS X
-        if (strcmp(name, APPLE_FINDER_INFO) == 0)
+        if (strcmp(name, "com.apple.FinderInfo") == 0)
             return -EACCES;
 
         flags &= XATTR_CREATE | XATTR_REPLACE;
@@ -1000,5 +1002,6 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
+#endif
 }
 }

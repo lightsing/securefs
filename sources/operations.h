@@ -92,7 +92,9 @@ namespace operations
 
     int utimens(const char* path, const struct timespec ts[2]);
 
+#if defined(__APPLE__) || defined(__LINUX__)
     int listxattr(const char* path, char* list, size_t size);
+    int removexattr(const char* path, const char* name);
 
 #ifdef __APPLE__
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position);
@@ -108,7 +110,6 @@ namespace operations
 
     int setxattr(const char* path, const char* name, const char* value, size_t size, int flags);
 #endif
-
-    int removexattr(const char* path, const char* name);
+#endif
 }
 }

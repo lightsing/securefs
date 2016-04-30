@@ -159,6 +159,7 @@ public:
     void stat(struct stat* st);
 
     int file_descriptor() const { return m_data_fd; }
+
     ssize_t listxattr(char* buffer, size_t size);
 
     ssize_t getxattr(const char* name, char* value, size_t size);
