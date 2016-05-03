@@ -225,27 +225,17 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
 void generate_random(byte* data, size_t size)
 {
     static std::mutex lock;
-    static yarrow256_ctx ctx;
-    static bool inited = false;
+    static int fd = -1;
 
     std::lock_guard<std::mutex> guard(lock);
-    if (!inited)
+    if (fd < 0)
     {
-        yarrow256_init(&ctx, 0, nullptr);
-        int fd = ::open("/dev/urandom", O_RDONLY);
+        fd = ::open("/dev/urandom", O_RDONLY);
         if (fd < 0)
             throw UnderlyingOSException(errno, "/dev/urandom failure");
-        std::array<byte, 64> key;
-        if (::read(fd, key.data(), key.size()) != key.size())
-        {
-            ::close(fd);
-            throw UnderlyingOSException(errno, "Reading urandom failed");
-        }
-        yarrow256_seed(&ctx, key.size(), key.data());
-        ::close(fd);
-        inited = true;
     }
-    yarrow256_random(&ctx, size, data);
+    if (::read(fd, data, size) != static_cast<ssize_t>(size))
+        throw UnderlyingOSException(errno, "Reading from /dev/urandom fails");
 }
 
 static void hkdf_expand(const byte* distilled_key,
