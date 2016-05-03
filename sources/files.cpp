@@ -184,7 +184,7 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
                                    XATTR_IV_LENGTH,
                                    mac,
                                    XATTR_MAC_LENGTH,
-                                   value);
+                                   reinterpret_cast<byte*>(value));
     if (m_check && !success)
         throw XattrVerificationException(get_id(), name);
     return true_size;
@@ -217,7 +217,7 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
-    aes_gcm_encrypt(value,
+    aes_gcm_encrypt(reinterpret_cast<const byte*>(value),
                     size,
                     header.get(),
                     name_len + ID_LENGTH,

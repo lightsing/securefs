@@ -83,7 +83,7 @@ TEST_CASE("Test hkdf")
                    sizeof(key),
                    salt,
                    sizeof(salt),
-                   info,
+                   reinterpret_cast<const byte*>(info),
                    strlen(info),
                    test_derived,
                    sizeof(test_derived));

@@ -246,6 +246,30 @@ public:
 
 void generate_random(byte* data, size_t size);
 
+void aes_gcm_encrypt(const byte* plaintext,
+                     size_t text_len,
+                     const byte* header,
+                     size_t header_len,
+                     const byte* key,
+                     size_t key_len,
+                     const byte* iv,
+                     size_t iv_len,
+                     byte* mac,
+                     size_t mac_len,
+                     byte* ciphertext);
+
+bool aes_gcm_decrypt(const byte* ciphertext,
+                     size_t text_len,
+                     const byte* header,
+                     size_t header_len,
+                     const byte* key,
+                     size_t key_len,
+                     const byte* iv,
+                     size_t iv_len,
+                     const byte* mac,
+                     size_t mac_len,
+                     byte* plaintext);
+
 // HMAC based key derivation function (https://tools.ietf.org/html/rfc5869)
 // This one is not implemented by Crypto++, so we implement it ourselves
 void hkdf(const byte* key,

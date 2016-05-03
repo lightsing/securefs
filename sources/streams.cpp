@@ -383,7 +383,7 @@ namespace internal
             {
                 generate_random(iv, get_iv_size());
             } while (is_all_zeros(iv, get_iv_size()));    // Null IVs are markers for sparse blocks
-            aes_gcm_encrypt(input,
+            aes_gcm_encrypt(static_cast<const byte*>(input),
                             length,
                             id().data(),
                             id().size(),
@@ -393,7 +393,7 @@ namespace internal
                             get_iv_size(),
                             mac,
                             get_mac_size(),
-                            output);
+                            static_cast<byte*>(output));
             auto pos = meta_position_for_iv(block_number);
             m_metastream.write(buffer.get(), pos, get_meta_size());
         }
@@ -420,7 +420,7 @@ namespace internal
                 memset(output, 0, length);
                 return;
             }
-            bool success = aes_gcm_decrypt(input,
+            bool success = aes_gcm_decrypt(static_cast<const byte*>(input),
                                            length,
                                            id().data(),
                                            id().size(),
@@ -430,7 +430,7 @@ namespace internal
                                            get_iv_size(),
                                            mac,
                                            get_mac_size(),
-                                           output);
+                                           static_cast<byte*>(output));
             if (m_check && !success)
                 throw MessageVerificationException(id(), block_number * m_block_size);
         }
@@ -477,7 +477,7 @@ namespace internal
                             get_iv_size(),
                             mac,
                             get_mac_size(),
-                            output);
+                            static_cast<byte*>(output));
             return get_encrypted_header_size();
         }
 
@@ -489,7 +489,7 @@ namespace internal
             byte* ciphertext = mac + get_mac_size();
             generate_random(iv, get_iv_size());
 
-            aes_gcm_encrypt(input,
+            aes_gcm_encrypt(static_cast<const byte*>(input),
                             get_header_size(),
                             id().data(),
                             id().size(),
