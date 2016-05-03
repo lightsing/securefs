@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <vector>
@@ -315,17 +316,22 @@ bool aes_gcm_decrypt(const byte* ciphertext,
 void generate_random(byte* data, size_t size)
 {
     static std::mutex lock;
-    static int fd = -1;
+    static FILE* fp = nullptr;
 
     std::lock_guard<std::mutex> guard(lock);
-    if (fd < 0)
+    if (!fp)
     {
-        fd = ::open("/dev/urandom", O_RDONLY);
-        if (fd < 0)
+        fp = fopen("/dev/urandom", "rb");
+        if (!fp)
             throw UnderlyingOSException(errno, "/dev/urandom failure");
     }
-    if (::read(fd, data, size) != static_cast<ssize_t>(size))
-        throw UnderlyingOSException(errno, "Reading from /dev/urandom fails");
+    if (fread(data, 1, size, fp) != size)
+    {
+        if (ferror(fp))
+            throw UnderlyingOSException(errno, "Reading from /dev/urandom fails");
+        else
+            throw UnderlyingOSException(EIO, "Insufficient read from /dev/urandom");
+    }
 }
 
 static void hkdf_expand(const byte* distilled_key,
