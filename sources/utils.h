@@ -304,6 +304,8 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                void* derived,
                                size_t derive_len);
 
+int constant_time_compare(const void* a, const void* b, size_t a_size, size_t b_size);
+
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 
@@ -325,17 +327,17 @@ void respond_to_user_action(
     const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
 
 class SecureByteBlock
-    {
-    private:
-        char* m_data;
-        size_t m_size;
-        DISABLE_COPY_MOVE(SecureByteBlock)
+{
+private:
+    char* m_data;
+    size_t m_size;
+    DISABLE_COPY_MOVE(SecureByteBlock)
 
-    public:
-        explicit SecureByteBlock(size_t);
-        ~SecureByteBlock();
-        char* data() { return m_data; }
-        const char* data() const {return m_data;}
-        size_t size() const{return m_size;}
-    };
+public:
+    explicit SecureByteBlock(size_t);
+    ~SecureByteBlock();
+    char* data() { return m_data; }
+    const char* data() const { return m_data; }
+    size_t size() const { return m_size; }
+};
 }

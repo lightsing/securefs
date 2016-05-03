@@ -1,10 +1,10 @@
 #include "utils.h"
 #include "exceptions.h"
 
-#include <nettle/sha.h>
-#include <nettle/hmac.h>
 #include <nettle/aes.h>
 #include <nettle/gcm.h>
+#include <nettle/hmac.h>
+#include <nettle/sha.h>
 
 #include <algorithm>
 #include <string.h>
@@ -623,21 +623,32 @@ void respond_to_user_action(
     }
 }
 
-    SecureByteBlock::SecureByteBlock(size_t size){
-        m_size=size;
-        m_data=std::calloc(1, size);
-        if (!m_data)
-            throw std::bad_alloc("Calloc fails");
-    }
+SecureByteBlock::SecureByteBlock(size_t size)
+{
+    m_size = size;
+    m_data = std::calloc(1, size);
+    if (!m_data)
+        throw std::bad_alloc("Calloc fails");
+}
 
-    static void __attribute__ ((optnone)) erase_and_free(void* buffer, size_t size)
-    {
-        std::memset(buffer, 0xff, size);
-        std::free(buffer);
-    }
+static void __attribute__((optnone)) erase_and_free(void* buffer, size_t size)
+{
+    std::memset(buffer, 0xff, size);
+    std::free(buffer);
+}
 
-    SecureByteBlock::~SecureByteBlock()
-    {
-        erase_and_free(m_data, m_size);
-    }
+SecureByteBlock::~SecureByteBlock() { erase_and_free(m_data, m_size); }
+int constant_time_compare(const void* a, const void* b, size_t a_size, size_t b_size)
+{
+    if (a_size > b_size)
+        return 1;
+    if (a_size < b_size)
+        return -1;
+
+    int rc = 0;
+    auto aa = static_cast<const uint8_t*>(a);
+    auto bb = static_cast<const uint8_t*>(b);
+    for (size_t i = 0; i < a_size; ++i)
+        rc |= aa[i] ^ bb[i];
+    return rc;
 }

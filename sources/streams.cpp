@@ -35,20 +35,19 @@ namespace internal
     private:
         key_type m_key;
         id_type m_id;
+        hmac_sha256_ctx m_ctx;
         std::shared_ptr<StreamBase> m_stream;
         bool is_dirty;
 
-        typedef CryptoPP::HMAC<CryptoPP::SHA256> hmac_calculator_type;
-
-        static const size_t hmac_length = hmac_calculator_type::DIGESTSIZE;
+        static const size_t hmac_length = SHA256_DATA_SIZE;
 
     private:
         const id_type& id() const noexcept { return m_id; }
         const key_type& key() const noexcept { return m_key; }
 
-        void run_mac(CryptoPP::MessageAuthenticationCode& calculator)
+        void run_mac()
         {
-            calculator.Update(id().data(), id().size());
+            nettle_hmac_sha256_update(&m_ctx, m_id.size(), m_id.data());
             std::array<byte, 4096> buffer;
             offset_type off = hmac_length;
             while (true)
@@ -56,7 +55,7 @@ namespace internal
                 auto rc = m_stream->read(buffer.data(), off, buffer.size());
                 if (rc == 0)
                     break;
-                calculator.Update(buffer.data(), rc);
+                nettle_hmac_sha256_update(&m_ctx, rc, buffer.data());
                 off += rc;
             }
         }
@@ -70,6 +69,8 @@ namespace internal
         {
             if (!m_stream)
                 NULL_EXCEPT();
+            nettle_hmac_sha256_set_key(&m_ctx, m_key.size(), m_key.data());
+
             if (check)
             {
                 std::array<byte, hmac_length> hmac;
@@ -79,11 +80,14 @@ namespace internal
                 if (rc != hmac_length)
                     throw InvalidHMACStreamException(
                         id(), "The header field for stream is not of enough length");
-                hmac_calculator_type calculator;
-                calculator.SetKey(key().data(), key().size());
-                run_mac(calculator);
-                if (!calculator.Verify(hmac.data()))
-                    throw InvalidHMACStreamException(id(), "HMAC mismatch");
+
+                run_mac();
+                std::array<byte, hmac_length> calculated_mac;
+                nettle_hmac_sha256_digest(&m_ctx, calculated_mac.size(), calculated_mac.data());
+                if (securefs::constant_time_compare(
+                        calculated_mac.data(), hmac.data(), calculated_mac.size(), hmac.size())
+                    != 0)
+                    throw InvalidHMACStreamException(m_id, "Invalid HMAC");
             }
         }
 
@@ -103,11 +107,9 @@ namespace internal
         {
             if (!is_dirty)
                 return;
-            hmac_calculator_type calculator;
-            calculator.SetKey(key().data(), key().size());
-            run_mac(calculator);
+            run_mac();
             std::array<byte, hmac_length> hmac;
-            calculator.Final(hmac.data());
+            nettle_hmac_sha256_digest(&m_ctx, hmac.size(), hmac.data());
             m_stream->write(hmac.data(), 0, hmac.size());
             m_stream->flush();
             is_dirty = false;
@@ -554,161 +556,5 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                                                                 block_size,
                                                                 iv_size);
     return {stream, stream};
-}
-
-namespace internal
-{
-    class Salsa20Stream : public StreamBase
-    {
-    public:
-        static const char* MAGIC;
-        static const size_t MAGIC_LEN = 16;
-
-    private:
-        class Header
-        {
-        public:
-            uint32_t iterations;
-            byte IV[8];
-            byte salt[36];
-
-            static const size_t HEADER_LEN
-                = Salsa20Stream::MAGIC_LEN + sizeof(iterations) + sizeof(IV) + sizeof(salt);
-
-            void to_bytes(byte buffer[HEADER_LEN])
-            {
-                memcpy(buffer, MAGIC, Salsa20Stream::MAGIC_LEN);
-                buffer += Salsa20Stream::MAGIC_LEN;
-                to_little_endian(iterations, buffer);
-                buffer += sizeof(iterations);
-                memcpy(buffer, IV, sizeof(IV));
-                buffer += sizeof(IV);
-                memcpy(buffer, salt, sizeof(salt));
-            }
-
-            bool from_bytes(const byte buffer[HEADER_LEN])
-            {
-                if (memcmp(buffer, Salsa20Stream::MAGIC, Salsa20Stream::MAGIC_LEN))
-                    return false;
-                buffer += Salsa20Stream::MAGIC_LEN;
-                iterations = from_little_endian<decltype(iterations)>(buffer);
-                buffer += sizeof(iterations);
-                memcpy(IV, buffer, sizeof(IV));
-                buffer += sizeof(IV);
-                memcpy(salt, buffer, sizeof(salt));
-                return true;
-            }
-        };
-
-    private:
-        std::shared_ptr<StreamBase> m_stream;
-        CryptoPP::Salsa20::Encryption m_cipher;
-
-    private:
-        void unchecked_write(const void* data, offset_type off, length_type len)
-        {
-            std::unique_ptr<byte[]> buffer(new byte[len]);
-            m_cipher.Seek(off);
-            m_cipher.ProcessString(buffer.get(), static_cast<const byte*>(data), len);
-            m_stream->write(buffer.get(), off + HEADER_LEN, len);
-        }
-
-        void zero_fill(length_type pos)
-        {
-            auto sz = size();
-            if (pos > sz)
-            {
-                auto gap_len = pos - sz;
-                std::unique_ptr<byte[]> buffer(new byte[gap_len]);
-                memset(buffer.get(), 0, gap_len);
-                m_cipher.Seek(sz);
-                m_cipher.ProcessString(buffer.get(), gap_len);
-                m_stream->write(buffer.get(), sz + HEADER_LEN, gap_len);
-            }
-        }
-
-    public:
-        static const size_t HEADER_LEN = Header::HEADER_LEN;
-
-    public:
-        explicit Salsa20Stream(std::shared_ptr<StreamBase> stream,
-                               const void* password,
-                               size_t pass_len)
-            : m_stream(std::move(stream))
-        {
-            if (!m_stream)
-                NULL_EXCEPT();
-
-            if (strlen(MAGIC) != MAGIC_LEN)
-                UNREACHABLE();
-
-            byte buffer[HEADER_LEN];
-            Header m_header;
-            key_type m_key;
-
-            if (m_stream->read(buffer, 0, sizeof(buffer)) == sizeof(buffer))
-            {
-                if (!m_header.from_bytes(buffer))
-                    throw std::runtime_error("Incorrect file type");
-            }
-            else
-            {
-                generate_random(m_header.IV, sizeof(m_header.IV));
-                generate_random(m_header.salt, sizeof(m_header.salt));
-                m_header.iterations = 20000;
-                m_header.to_bytes(buffer);
-                m_stream->resize(0);
-                m_stream->write(buffer, 0, sizeof(buffer));
-            }
-
-            pbkdf_hmac_sha256(password,
-                              pass_len,
-                              m_header.salt,
-                              sizeof(m_header.salt),
-                              m_header.iterations,
-                              0,
-                              m_key.data(),
-                              m_key.size());
-            m_cipher.SetKeyWithIV(m_key.data(), m_key.size(), m_header.IV, sizeof(m_header.IV));
-        }
-
-        length_type read(void* buffer, offset_type off, length_type len) override
-        {
-            auto real_len = m_stream->read(buffer, off + HEADER_LEN, len);
-            if (real_len == 0)
-                return 0;
-            m_cipher.Seek(off);
-            m_cipher.ProcessString(static_cast<byte*>(buffer), real_len);
-            return real_len;
-        }
-
-        void write(const void* data, offset_type off, length_type len) override
-        {
-            if (len == 0)
-                return;
-            zero_fill(off);
-            unchecked_write(data, off, len);
-        }
-
-        length_type size() const override
-        {
-            auto sz = m_stream->size();
-            return sz <= HEADER_LEN ? 0 : sz - HEADER_LEN;
-        }
-        void flush() override { return m_stream->flush(); }
-        void resize(length_type len) override
-        {
-            zero_fill(len);
-            return m_stream->resize(len + HEADER_LEN);
-        }
-    };
-
-    const char* Salsa20Stream::MAGIC = "securefs:salsa20";
-}
-
-std::shared_ptr<StreamBase>
-make_stream_salsa20(std::shared_ptr<StreamBase> stream, const void* password, size_t pass_len)
-{
-    return std::make_shared<internal::Salsa20Stream>(std::move(stream), password, pass_len);
 }
 }
