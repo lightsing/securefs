@@ -230,17 +230,17 @@ namespace
     {
         DISABLE_COPY_MOVE(GCMAESContextWithKey)
     public:
-        gcm_aes256_ctx ctx;
+        gcm_aes_ctx ctx;
         PODArray<byte, AES256_KEY_SIZE> key;
 
-        explicit GCMAESContextWithKey() { nettle_gcm_aes256_set_key(&ctx, key.data()); }
+        explicit GCMAESContextWithKey() { nettle_gcm_aes_set_key(&ctx, key.size(), key.data()); }
 
         void reset_key(const byte* new_key)
         {
             if (memcmp(key.data(), new_key, AES256_KEY_SIZE) == 0)
                 return;
             memcpy(key.data(), new_key, AES256_KEY_SIZE);
-            nettle_gcm_aes256_set_key(&ctx, key.data());
+            nettle_gcm_aes_set_key(&ctx, key.size(), key.data());
         }
     };
 }
@@ -265,31 +265,31 @@ void aes_gcm_encrypt(const byte* plaintext,
     GCMAESContextWithKey* context_key = tls_context_key.get();
     context_key->reset_key(key);
 
-    gcm_aes256_ctx* pctx = &tls_context_key->ctx;
+    gcm_aes_ctx* pctx = &tls_context_key->ctx;
 
-    nettle_gcm_aes256_set_iv(pctx, iv_len, iv);
+    nettle_gcm_aes_set_iv(pctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_update(pctx, AES_BLOCK_SIZE, header);
+        nettle_gcm_aes_update(pctx, AES_BLOCK_SIZE, header);
         header += AES_BLOCK_SIZE;
         header_len -= AES_BLOCK_SIZE;
     }
     if (header_len > 0)
-        nettle_gcm_aes256_update(pctx, header_len, header);
+        nettle_gcm_aes_update(pctx, header_len, header);
 
     while (text_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_encrypt(pctx, AES_BLOCK_SIZE, ciphertext, plaintext);
+        nettle_gcm_aes_encrypt(pctx, AES_BLOCK_SIZE, ciphertext, plaintext);
         plaintext += AES_BLOCK_SIZE;
         ciphertext += AES_BLOCK_SIZE;
         text_len -= AES_BLOCK_SIZE;
     }
     if (text_len > 0)
     {
-        nettle_gcm_aes256_encrypt(pctx, text_len, ciphertext, plaintext);
+        nettle_gcm_aes_encrypt(pctx, text_len, ciphertext, plaintext);
     }
-    nettle_gcm_aes256_digest(pctx, mac_len, mac);
+    nettle_gcm_aes_digest(pctx, mac_len, mac);
 }
 
 bool aes_gcm_decrypt(const byte* ciphertext,
@@ -312,31 +312,31 @@ bool aes_gcm_decrypt(const byte* ciphertext,
     GCMAESContextWithKey* context_key = tls_context_key.get();
     context_key->reset_key(key);
 
-    gcm_aes256_ctx* pctx = &tls_context_key->ctx;
-    nettle_gcm_aes256_set_iv(pctx, iv_len, iv);
+    gcm_aes_ctx* pctx = &tls_context_key->ctx;
+    nettle_gcm_aes_set_iv(pctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_update(pctx, AES_BLOCK_SIZE, header);
+        nettle_gcm_aes_update(pctx, AES_BLOCK_SIZE, header);
         header += AES_BLOCK_SIZE;
         header_len -= AES_BLOCK_SIZE;
     }
     if (header_len > 0)
-        nettle_gcm_aes256_update(pctx, header_len, header);
+        nettle_gcm_aes_update(pctx, header_len, header);
 
     while (text_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_decrypt(pctx, AES_BLOCK_SIZE, plaintext, ciphertext);
+        nettle_gcm_aes_decrypt(pctx, AES_BLOCK_SIZE, plaintext, ciphertext);
         plaintext += AES_BLOCK_SIZE;
         ciphertext += AES_BLOCK_SIZE;
         text_len -= AES_BLOCK_SIZE;
     }
     if (text_len > 0)
     {
-        nettle_gcm_aes256_decrypt(pctx, text_len, plaintext, ciphertext);
+        nettle_gcm_aes_decrypt(pctx, text_len, plaintext, ciphertext);
     }
     std::array<byte, GCM_DIGEST_SIZE> digest;
-    nettle_gcm_aes256_digest(pctx, digest.size(), digest.data());
+    nettle_gcm_aes_digest(pctx, digest.size(), digest.data());
     return constant_time_compare(mac,
                                  digest.data(),
                                  std::min(digest.size(), mac_len),
