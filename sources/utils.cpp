@@ -222,6 +222,93 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
     }
 }
 
+void aes_gcm_encrypt(const byte* plaintext,
+                     size_t text_len,
+                     const byte* header,
+                     size_t header_len,
+                     const byte* key,
+                     size_t key_len,
+                     const byte* iv,
+                     size_t iv_len,
+                     byte* mac,
+                     size_t mac_len,
+                     byte* ciphertext)
+{
+    if (key_len != AES256_KEY_SIZE)
+        throw InvalidArgumentException("Invalid key size");
+
+    gcm_aes256_ctx ctx;
+    nettle_gcm_aes256_set_key(&ctx, key);
+    nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
+
+    while (header_len >= AES_BLOCK_SIZE)
+    {
+        nettle_gcm_aes256_update(&ctx, AES_BLOCK_SIZE, header);
+        header += AES_BLOCK_SIZE;
+        header_len -= AES_BLOCK_SIZE;
+    }
+    if (header_len > 0)
+        nettle_gcm_aes256_update(&ctx, header_len, header);
+
+    while (text_len >= AES_BLOCK_SIZE)
+    {
+        nettle_gcm_aes256_encrypt(&ctx, AES_BLOCK_SIZE, ciphertext, plaintext);
+        plaintext += AES_BLOCK_SIZE;
+        ciphertext += AES_BLOCK_SIZE;
+        text_len -= AES_BLOCK_SIZE;
+    }
+    if (text_len > 0)
+    {
+        nettle_gcm_aes256_encrypt(&ctx, text_len, ciphertext, plaintext);
+    }
+    nettle_gcm_aes256_digest(&ctx, mac_len, mac);
+}
+
+bool aes_gcm_decrypt(const byte* ciphertext,
+                     size_t text_len,
+                     const byte* header,
+                     size_t header_len,
+                     const byte* key,
+                     size_t key_len,
+                     const byte* iv,
+                     size_t iv_len,
+                     const byte* mac,
+                     size_t mac_len,
+                     byte* plaintext)
+{
+    if (key_len != AES256_KEY_SIZE)
+        throw InvalidArgumentException("Invalid key size");
+
+    gcm_aes256_ctx ctx;
+    nettle_gcm_aes256_set_key(&ctx, key);
+    nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
+
+    while (header_len >= AES_BLOCK_SIZE)
+    {
+        nettle_gcm_aes256_update(&ctx, AES_BLOCK_SIZE, header);
+        header += AES_BLOCK_SIZE;
+        header_len -= AES_BLOCK_SIZE;
+    }
+    if (header_len > 0)
+        nettle_gcm_aes256_update(&ctx, header_len, header);
+
+    while (text_len >= AES_BLOCK_SIZE)
+    {
+        nettle_gcm_aes256_decrypt(&ctx, AES_BLOCK_SIZE, plaintext, ciphertext);
+        plaintext += AES_BLOCK_SIZE;
+        ciphertext += AES_BLOCK_SIZE;
+        text_len -= AES_BLOCK_SIZE;
+    }
+    if (text_len > 0)
+    {
+        nettle_gcm_aes256_decrypt(&ctx, text_len, plaintext, ciphertext);
+    }
+    std::array<byte, GCM_DIGEST_SIZE> digest;
+    nettle_gcm_aes256_digest(&ctx, digest.size(), digest.data());
+    return constant_time_compare(
+        mac, digest.data(), std::min(digest.size(), mac_len), std::min(digest.size(), mac_len)) == 0;
+}
+
 void generate_random(byte* data, size_t size)
 {
     static std::mutex lock;
@@ -535,6 +622,19 @@ void respond_to_user_action(
     }
 }
 
+int constant_time_compare(const byte* a, const byte* b, size_t a_size, size_t b_size)
+{
+    if (a_size > b_size)
+        return 1;
+    if (a_size < b_size)
+        return -1;
+
+    int rc = 0;
+    for (size_t i = 0; i < a_size; ++i)
+        rc |= a[i] ^ b[i];
+    return rc;
+}
+
 SecureByteBlock::SecureByteBlock(size_t size)
 {
     m_size = size;
@@ -550,18 +650,4 @@ static void __attribute__((optnone)) erase_and_free(void* buffer, size_t size)
 }
 
 SecureByteBlock::~SecureByteBlock() { erase_and_free(m_data, m_size); }
-int constant_time_compare(const void* a, const void* b, size_t a_size, size_t b_size)
-{
-    if (a_size > b_size)
-        return 1;
-    if (a_size < b_size)
-        return -1;
-
-    int rc = 0;
-    auto aa = static_cast<const uint8_t*>(a);
-    auto bb = static_cast<const uint8_t*>(b);
-    for (size_t i = 0; i < a_size; ++i)
-        rc |= aa[i] ^ bb[i];
-    return rc;
-}
 }

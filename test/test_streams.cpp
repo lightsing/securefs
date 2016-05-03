@@ -136,16 +136,6 @@ TEST_CASE("Test streams")
         test(ds, 5000);
     }
     {
-        posix_stream->resize(0);
-        byte password[20];
-        securefs::generate_random(password, sizeof(password));
-        auto salsa20stream
-            = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
-        test(*salsa20stream, 2000);
-        salsa20stream = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
-        test(*salsa20stream, 2000);
-    }
-    {
         char temp_template[] = "/tmp/securefs.stream.XXXXXX";
         auto meta_posix_stream
             = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
