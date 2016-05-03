@@ -223,6 +223,27 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
     }
 }
 
+namespace
+{
+    class GCMAESContextWithKey
+    {
+        DISABLE_COPY_MOVE(GCMAESContextWithKey)
+    public:
+        gcm_aes256_ctx ctx;
+        PODArray<byte, AES256_KEY_SIZE> key;
+
+        explicit GCMAESContextWithKey() { nettle_gcm_aes256_set_key(&ctx, key.data()); }
+
+        void reset_key(const byte* new_key)
+        {
+            if (memcmp(key.data(), new_key, AES256_KEY_SIZE) == 0)
+                return;
+            memcpy(key.data(), new_key, AES256_KEY_SIZE);
+            nettle_gcm_aes256_set_key(&ctx, key.data());
+        }
+    };
+}
+
 void aes_gcm_encrypt(const byte* plaintext,
                      size_t text_len,
                      const byte* header,
@@ -238,8 +259,13 @@ void aes_gcm_encrypt(const byte* plaintext,
     if (key_len != AES256_KEY_SIZE)
         throw InvalidArgumentException("Invalid key size");
 
-    gcm_aes256_ctx ctx;
-    nettle_gcm_aes256_set_key(&ctx, key);
+    static ThreadLocalStorage<GCMAESContextWithKey> tls_context_key;
+
+    GCMAESContextWithKey* context_key = tls_context_key.get();
+    context_key->reset_key(key);
+
+    gcm_aes256_ctx& ctx = tls_context_key->ctx;
+
     nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
@@ -280,8 +306,12 @@ bool aes_gcm_decrypt(const byte* ciphertext,
     if (key_len != AES256_KEY_SIZE)
         throw InvalidArgumentException("Invalid key size");
 
-    gcm_aes256_ctx ctx;
-    nettle_gcm_aes256_set_key(&ctx, key);
+    static ThreadLocalStorage<GCMAESContextWithKey> tls_context_key;
+
+    GCMAESContextWithKey* context_key = tls_context_key.get();
+    context_key->reset_key(key);
+
+    gcm_aes256_ctx& ctx = tls_context_key->ctx;
     nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
@@ -632,7 +662,10 @@ void respond_to_user_action(
     }
 }
 
-int NO_OPTIMIZATION constant_time_compare(const byte* a, const byte* b, size_t a_size, size_t b_size)
+int NO_OPTIMIZATION constant_time_compare(const byte* a,
+                                          const byte* b,
+                                          size_t a_size,
+                                          size_t b_size)
 {
     if (a_size > b_size)
         return 1;
@@ -652,7 +685,6 @@ SecureByteBlock::SecureByteBlock(size_t size)
     if (!m_data)
         throw std::bad_alloc();
 }
-
 
 static void NO_OPTIMIZATION erase_and_free(void* buffer, size_t size)
 {
