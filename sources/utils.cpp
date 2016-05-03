@@ -23,6 +23,14 @@
 #include <termios.h>
 #include <unistd.h>
 
+#ifndef AES256_KEY_SIZE
+#define AES256_KEY_SIZE 32
+#endif
+
+#ifndef GCM_DIGEST_SIZE
+#define GCM_DIGEST_SIZE 16
+#endif
+
 namespace securefs
 {
 

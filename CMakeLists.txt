@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 project (securefs)
 
-set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
+set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64 -pthread")
 set (CMAKE_BUILD_TYPE Release)
 
 include_directories("${PROJECT_SOURCE_DIR}/sources")
