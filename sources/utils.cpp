@@ -264,31 +264,31 @@ void aes_gcm_encrypt(const byte* plaintext,
     GCMAESContextWithKey* context_key = tls_context_key.get();
     context_key->reset_key(key);
 
-    gcm_aes256_ctx& ctx = tls_context_key->ctx;
+    gcm_aes256_ctx* pctx = &tls_context_key->ctx;
 
-    nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
+    nettle_gcm_aes256_set_iv(pctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_update(&ctx, AES_BLOCK_SIZE, header);
+        nettle_gcm_aes256_update(pctx, AES_BLOCK_SIZE, header);
         header += AES_BLOCK_SIZE;
         header_len -= AES_BLOCK_SIZE;
     }
     if (header_len > 0)
-        nettle_gcm_aes256_update(&ctx, header_len, header);
+        nettle_gcm_aes256_update(pctx, header_len, header);
 
     while (text_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_encrypt(&ctx, AES_BLOCK_SIZE, ciphertext, plaintext);
+        nettle_gcm_aes256_encrypt(pctx, AES_BLOCK_SIZE, ciphertext, plaintext);
         plaintext += AES_BLOCK_SIZE;
         ciphertext += AES_BLOCK_SIZE;
         text_len -= AES_BLOCK_SIZE;
     }
     if (text_len > 0)
     {
-        nettle_gcm_aes256_encrypt(&ctx, text_len, ciphertext, plaintext);
+        nettle_gcm_aes256_encrypt(pctx, text_len, ciphertext, plaintext);
     }
-    nettle_gcm_aes256_digest(&ctx, mac_len, mac);
+    nettle_gcm_aes256_digest(pctx, mac_len, mac);
 }
 
 bool aes_gcm_decrypt(const byte* ciphertext,
@@ -311,31 +311,31 @@ bool aes_gcm_decrypt(const byte* ciphertext,
     GCMAESContextWithKey* context_key = tls_context_key.get();
     context_key->reset_key(key);
 
-    gcm_aes256_ctx& ctx = tls_context_key->ctx;
-    nettle_gcm_aes256_set_iv(&ctx, iv_len, iv);
+    gcm_aes256_ctx* pctx = &tls_context_key->ctx;
+    nettle_gcm_aes256_set_iv(pctx, iv_len, iv);
 
     while (header_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_update(&ctx, AES_BLOCK_SIZE, header);
+        nettle_gcm_aes256_update(pctx, AES_BLOCK_SIZE, header);
         header += AES_BLOCK_SIZE;
         header_len -= AES_BLOCK_SIZE;
     }
     if (header_len > 0)
-        nettle_gcm_aes256_update(&ctx, header_len, header);
+        nettle_gcm_aes256_update(pctx, header_len, header);
 
     while (text_len >= AES_BLOCK_SIZE)
     {
-        nettle_gcm_aes256_decrypt(&ctx, AES_BLOCK_SIZE, plaintext, ciphertext);
+        nettle_gcm_aes256_decrypt(pctx, AES_BLOCK_SIZE, plaintext, ciphertext);
         plaintext += AES_BLOCK_SIZE;
         ciphertext += AES_BLOCK_SIZE;
         text_len -= AES_BLOCK_SIZE;
     }
     if (text_len > 0)
     {
-        nettle_gcm_aes256_decrypt(&ctx, text_len, plaintext, ciphertext);
+        nettle_gcm_aes256_decrypt(pctx, text_len, plaintext, ciphertext);
     }
     std::array<byte, GCM_DIGEST_SIZE> digest;
-    nettle_gcm_aes256_digest(&ctx, digest.size(), digest.data());
+    nettle_gcm_aes256_digest(pctx, digest.size(), digest.data());
     return constant_time_compare(mac,
                                  digest.data(),
                                  std::min(digest.size(), mac_len),
@@ -377,29 +377,33 @@ static void hkdf_expand(const byte* distilled_key,
     hmac_sha256_ctx ctx;
     nettle_hmac_sha256_set_key(&ctx, dis_len, distilled_key);
 
-    size_t i = 0, j = 0;
     byte counter = 1;
-    while (i + j < out_len)
+    while (true)
     {
-        nettle_hmac_sha256_update(&ctx, j, out + i);
+        if (counter > 1)
+            nettle_hmac_sha256_update(&ctx, SHA256_DIGEST_SIZE, out - SHA256_DIGEST_SIZE);
         if (info_len > 0)
             nettle_hmac_sha256_update(&ctx, info_len, info);
         nettle_hmac_sha256_update(&ctx, sizeof(counter), &counter);
         ++counter;
 
-        auto left_size = out_len - i - j;
-        i += j;
-        if (left_size >= SHA256_DIGEST_SIZE)
+        if (out_len > SHA256_DIGEST_SIZE)
         {
-            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out + i);
-            j = SHA256_DIGEST_SIZE;
+            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out);
+            out_len -= SHA256_DIGEST_SIZE;
+            out += SHA256_DIGEST_SIZE;
+        }
+        else if (out_len == SHA256_DIGEST_SIZE)
+        {
+            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out);
+            break;
         }
         else
         {
             std::array<byte, SHA256_DIGEST_SIZE> buffer;
             nettle_hmac_sha256_digest(&ctx, buffer.size(), buffer.data());
-            memcpy(out + i, buffer.data(), left_size);
-            j = left_size;
+            memcpy(out, buffer.data(), out_len);
+            break;
         }
     }
 }
