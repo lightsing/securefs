@@ -25,6 +25,12 @@
 
 typedef uint8_t byte;
 
+#ifdef __clang__
+#define NO_OPTIMIZATION __attribute__((optnone))
+#else
+#define NO_OPTIMIZATION __attribute__((optimize("O0")))
+#endif
+
 namespace securefs
 {
 typedef uint64_t length_type;

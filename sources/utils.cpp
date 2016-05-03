@@ -632,7 +632,7 @@ void respond_to_user_action(
     }
 }
 
-int constant_time_compare(const byte* a, const byte* b, size_t a_size, size_t b_size)
+int NO_OPTIMIZATION constant_time_compare(const byte* a, const byte* b, size_t a_size, size_t b_size)
 {
     if (a_size > b_size)
         return 1;
@@ -653,7 +653,8 @@ SecureByteBlock::SecureByteBlock(size_t size)
         throw std::bad_alloc();
 }
 
-static void __attribute__((optnone)) erase_and_free(void* buffer, size_t size)
+
+static void NO_OPTIMIZATION erase_and_free(void* buffer, size_t size)
 {
     std::memset(buffer, 0xff, size);
     std::free(buffer);
