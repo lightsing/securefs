@@ -4,7 +4,6 @@
 #include "utils.h"
 #include "xattr_compat.h"
 
-#include <cryptopp/secblock.h>
 #include <format.h>
 #include <fuse.h>
 #include <json.hpp>
@@ -365,7 +364,7 @@ nlohmann::json read_config(int dir_fd)
 
 size_t try_read_password_with_confirmation(void* password, size_t length)
 {
-    CryptoPP::AlignedSecByteBlock second_password(length);
+    securefs::SecureByteBlock second_password(length);
     static const char* first_prompt = "Password: ";
     static const char* second_prompt = "Retype password: ";
     size_t len1, len2;
@@ -441,7 +440,7 @@ int create_filesys(int argc, char** argv)
         generate_random(master_key.data(), master_key.size());
         generate_random(salt.data(), salt.size());
 
-        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+        securefs::SecureByteBlock password(MAX_PASS_LEN);
         size_t pass_len;
         if (stdinpass.getValue())
             pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
@@ -563,7 +562,7 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
         throw std::runtime_error(fmt::format("Unkown format version {}", version));
 
     {
-        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+        securefs::SecureByteBlock password(MAX_PASS_LEN);
         size_t pass_len = 0;
         if (stdinpass)
             pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
@@ -574,7 +573,7 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
         fsopt.block_size.set_init(true);
         fsopt.iv_size.set_init(true);
         if (!parse_config(config_json,
-                          password,
+                          password.data(),
                           pass_len,
                           fsopt.master_key.get(),
                           fsopt.block_size.get(),
@@ -708,15 +707,15 @@ int chpass_filesys(int argc, char** argv)
     auto config_json = read_config(folder_fd);
     key_type master_key;
 
-    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+    securefs::SecureByteBlock password(MAX_PASS_LEN);
     size_t pass_len = try_read_password(password.data(), password.size());
 
     unsigned block_size, iv_size;
-    if (!parse_config(config_json, password, pass_len, master_key, block_size, iv_size))
+    if (!parse_config(config_json, password.data(), pass_len, master_key, block_size, iv_size))
         throw std::runtime_error("Error: wrong password");
 
     fprintf(stderr, "Authentication success. Now enter new password.\n");
-    pass_len = try_read_password_with_confirmation(password, password.size());
+    pass_len = try_read_password_with_confirmation(password.data(), password.size());
 
     key_type salt;
     generate_random(salt.data(), salt.size());

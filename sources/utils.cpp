@@ -1,12 +1,10 @@
 #include "utils.h"
 #include "exceptions.h"
 
-#include <cryptopp/aes.h>
-#include <cryptopp/gcm.h>
-#include <cryptopp/hmac.h>
-#include <cryptopp/osrng.h>
-#include <cryptopp/pwdbased.h>
-#include <cryptopp/sha.h>
+#include <nettle/sha.h>
+#include <nettle/hmac.h>
+#include <nettle/aes.h>
+#include <nettle/gcm.h>
 
 #include <algorithm>
 #include <string.h>
@@ -624,4 +622,22 @@ void respond_to_user_action(
         break;
     }
 }
+
+    SecureByteBlock::SecureByteBlock(size_t size){
+        m_size=size;
+        m_data=std::calloc(1, size);
+        if (!m_data)
+            throw std::bad_alloc("Calloc fails");
+    }
+
+    static void __attribute__ ((optnone)) erase_and_free(void* buffer, size_t size)
+    {
+        std::memset(buffer, 0xff, size);
+        std::free(buffer);
+    }
+
+    SecureByteBlock::~SecureByteBlock()
+    {
+        erase_and_free(m_data, m_size);
+    }
 }

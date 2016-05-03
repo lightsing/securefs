@@ -6,8 +6,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include <cryptopp/secblock.h>
-
 #include <sys/types.h>
 
 namespace securefs

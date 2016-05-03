@@ -323,4 +323,19 @@ std::string get_user_input_until_enter();
 
 void respond_to_user_action(
     const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
+
+class SecureByteBlock
+    {
+    private:
+        char* m_data;
+        size_t m_size;
+        DISABLE_COPY_MOVE(SecureByteBlock)
+
+    public:
+        explicit SecureByteBlock(size_t);
+        ~SecureByteBlock();
+        char* data() { return m_data; }
+        const char* data() const {return m_data;}
+        size_t size() const{return m_size;}
+    };
 }
