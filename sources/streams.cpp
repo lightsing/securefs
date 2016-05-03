@@ -39,7 +39,7 @@ namespace internal
         std::shared_ptr<StreamBase> m_stream;
         bool is_dirty;
 
-        static const size_t hmac_length = SHA256_DATA_SIZE;
+        static const size_t hmac_length = SHA256_DIGEST_SIZE;
 
     private:
         const id_type& id() const noexcept { return m_id; }
@@ -48,7 +48,7 @@ namespace internal
         void run_mac()
         {
             nettle_hmac_sha256_update(&m_ctx, m_id.size(), m_id.data());
-            std::array<byte, 4096> buffer;
+            std::array<byte, 2000> buffer;
             offset_type off = hmac_length;
             while (true)
             {

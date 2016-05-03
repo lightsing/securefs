@@ -23,7 +23,7 @@
     cls& operator=(const cls&) = delete;                                                           \
     cls& operator=(cls&&) = delete;
 
-typedef unsigned char byte;
+typedef uint8_t byte;
 
 namespace securefs
 {
@@ -244,67 +244,20 @@ public:
     T& operator*() { return *get(); }
 };
 
-void generate_random(void* data, size_t size);
-
-void aes_gcm_encrypt(const void* plaintext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     void* mac,
-                     size_t mac_len,
-                     void* ciphertext);
-
-bool aes_gcm_decrypt(const void* ciphertext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     const void* mac,
-                     size_t mac_len,
-                     void* plaintext);
-
-void hmac_sha256_calculate(const void* message,
-                           size_t msg_len,
-                           const void* key,
-                           size_t key_len,
-                           void* mac,
-                           size_t mac_len);
-
-bool hmac_sha256_verify(const void* message,
-                        size_t msg_len,
-                        const void* key,
-                        size_t key_len,
-                        const void* mac,
-                        size_t mac_len);
+void generate_random(byte* data, size_t size);
 
 // HMAC based key derivation function (https://tools.ietf.org/html/rfc5869)
 // This one is not implemented by Crypto++, so we implement it ourselves
-void hkdf(const void* key,
+void hkdf(const byte* key,
           size_t key_len,
-          const void* salt,
+          const byte* salt,
           size_t salt_len,
-          const void* info,
+          const byte* info,
           size_t info_len,
-          void* output,
+          byte* output,
           size_t out_len);
 
-unsigned int pbkdf_hmac_sha256(const void* password,
-                               size_t pass_len,
-                               const void* salt,
-                               size_t salt_len,
-                               unsigned int min_iterations,
-                               double min_seconds,
-                               void* derived,
-                               size_t derive_len);
-
-int constant_time_compare(const void* a, const void* b, size_t a_size, size_t b_size);
+int constant_time_compare(const byte* a, const byte* b, size_t a_size, size_t b_size);
 
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);

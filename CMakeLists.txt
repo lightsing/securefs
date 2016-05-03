@@ -6,7 +6,7 @@ set (CMAKE_BUILD_TYPE Release)
 
 include_directories("${PROJECT_SOURCE_DIR}/sources")
 
-file (GLOB SOURCES "${PROJECT_SOURCE_DIR}/sources/*.cpp")
+file (GLOB SOURCES "${PROJECT_SOURCE_DIR}/sources/*.cpp" "${PROJECT_SOURCE_DIR}/sources/*.h")
 file (GLOB TEST_SOURCES "${PROJECT_SOURCE_DIR}/test/*.cpp")
 add_executable(securefs ${SOURCES} main.cpp)
 add_executable(securefs_test ${SOURCES} ${TEST_SOURCES})

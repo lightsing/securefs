@@ -220,168 +220,68 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
     }
 }
 
-void generate_random(void* data, size_t size)
+void generate_random(byte* data, size_t size)
 {
     static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> pool;
     pool->GenerateBlock(static_cast<byte*>(data), size);
 }
 
-void aes_gcm_encrypt(const void* plaintext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     void* mac,
-                     size_t mac_len,
-                     void* ciphertext)
-{
-    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Encryption> tls_encryptor;
-    static ThreadLocalStorage<std::vector<byte>> tls_last_key;
-    // Avoid expensive table computation by SetKey()
-
-    auto encryptor = tls_encryptor.get();
-    auto last_key = tls_last_key.get();
-
-    if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
-    {
-        encryptor->Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
-    }
-    else
-    {
-        encryptor->SetKeyWithIV(
-            static_cast<const byte*>(key), key_len, static_cast<const byte*>(iv), iv_len);
-        last_key->assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
-    }
-
-    encryptor->SpecifyDataLengths(header_len, text_len);
-    encryptor->Update(static_cast<const byte*>(header), header_len);
-    encryptor->ProcessString(
-        static_cast<byte*>(ciphertext), static_cast<const byte*>(plaintext), text_len);
-    encryptor->TruncatedFinal(static_cast<byte*>(mac), mac_len);
-}
-
-bool aes_gcm_decrypt(const void* ciphertext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     const void* mac,
-                     size_t mac_len,
-                     void* plaintext)
-{
-    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Decryption> tls_decryptor;
-    static ThreadLocalStorage<std::vector<byte>> tls_last_key;
-    // Avoid expensive table computation by SetKey()
-
-    auto decryptor = tls_decryptor.get();
-    auto last_key = tls_last_key.get();
-
-    if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
-    {
-        decryptor->Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
-    }
-    else
-    {
-        decryptor->SetKeyWithIV(
-            static_cast<const byte*>(key), key_len, static_cast<const byte*>(iv), iv_len);
-        last_key->assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
-    }
-
-    decryptor->SpecifyDataLengths(header_len, text_len);
-    decryptor->Update(static_cast<const byte*>(header), header_len);
-    decryptor->ProcessString(
-        static_cast<byte*>(plaintext), static_cast<const byte*>(ciphertext), text_len);
-    return decryptor->TruncatedVerify(static_cast<const byte*>(mac), mac_len);
-}
-
-void hmac_sha256_calculate(
-    const void* message, size_t msg_len, const void* key, size_t key_len, void* mac, size_t mac_len)
-{
-    CryptoPP::HMAC<CryptoPP::SHA256> hmac(static_cast<const byte*>(key), key_len);
-    hmac.Update(static_cast<const byte*>(message), msg_len);
-    hmac.TruncatedFinal(static_cast<byte*>(mac), mac_len);
-}
-
-bool hmac_sha256_verify(const void* message,
-                        size_t msg_len,
-                        const void* key,
-                        size_t key_len,
-                        const void* mac,
-                        size_t mac_len)
-{
-    CryptoPP::HMAC<CryptoPP::SHA256> hmac(static_cast<const byte*>(key), key_len);
-    hmac.Update(static_cast<const byte*>(message), msg_len);
-    return hmac.TruncatedVerify(static_cast<const byte*>(mac), mac_len);
-}
-
-unsigned int pbkdf_hmac_sha256(const void* password,
-                               size_t pass_len,
-                               const void* salt,
-                               size_t salt_len,
-                               unsigned int min_iterations,
-                               double min_seconds,
-                               void* derived,
-                               size_t derive_len)
-{
-    CryptoPP::PKCS5_PBKDF2_HMAC<CryptoPP::SHA256> kdf;
-    return kdf.DeriveKey(static_cast<byte*>(derived),
-                         derive_len,
-                         0,
-                         static_cast<const byte*>(password),
-                         pass_len,
-                         static_cast<const byte*>(salt),
-                         salt_len,
-                         min_iterations,
-                         min_seconds);
-}
-
-static void hkdf_expand(const void* distilled_key,
+static void hkdf_expand(const byte* distilled_key,
                         size_t dis_len,
-                        const void* info,
+                        const byte* info,
                         size_t info_len,
-                        void* output,
+                        byte* out,
                         size_t out_len)
 {
-    typedef CryptoPP::HMAC<CryptoPP::SHA256> hmac_type;
-    if (out_len > 255 * hmac_type::DIGESTSIZE)
+
+    if (out_len > 255 * SHA256_DIGEST_SIZE)
         throw InvalidArgumentException("Output length too large");
-    hmac_type calculator(static_cast<const byte*>(distilled_key), dis_len);
-    byte* out = static_cast<byte*>(output);
+    hmac_sha256_ctx ctx;
+    nettle_hmac_sha256_set_key(&ctx, dis_len, distilled_key);
+
     size_t i = 0, j = 0;
     byte counter = 1;
     while (i + j < out_len)
     {
-        calculator.Update(out + i, j);
-        calculator.Update(static_cast<const byte*>(info), info_len);
-        calculator.Update(&counter, sizeof(counter));
+        nettle_hmac_sha256_update(&ctx, j, out + i);
+        nettle_hmac_sha256_update(&ctx, info_len, info);
+        nettle_hmac_sha256_update(&ctx, sizeof(counter), &counter);
         ++counter;
-        auto small_len = std::min<size_t>(out_len - i - j, hmac_type::DIGESTSIZE);
-        calculator.TruncatedFinal(out + i + j, small_len);
+
+        auto left_size = out_len - i - j;
+        if (left_size >= SHA256_DIGEST_SIZE)
+        {
+            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out + i + j);
+            j = SHA256_DIGEST_SIZE;
+        }
+        else
+        {
+            std::array<byte, SHA256_DIGEST_SIZE> buffer;
+            nettle_hmac_sha256_digest(&ctx, buffer.size(), buffer.data());
+            memcpy(out + i + j, buffer.data(), left_size);
+            j = left_size;
+        }
         i += j;
-        j = small_len;
     }
 }
 
-void hkdf(const void* key,
+void hkdf(const byte* key,
           size_t key_len,
-          const void* salt,
+          const byte* salt,
           size_t salt_len,
-          const void* info,
+          const byte* info,
           size_t info_len,
-          void* output,
+          byte* output,
           size_t out_len)
 {
     if (salt && salt_len)
     {
-        byte distilled_key[32];
-        hmac_sha256_calculate(key, key_len, salt, salt_len, distilled_key, sizeof(distilled_key));
-        hkdf_expand(distilled_key, sizeof(distilled_key), info, info_len, output, out_len);
+        std::array<byte, SHA256_DIGEST_SIZE> distilled_key;
+        hmac_sha256_ctx ctx;
+        nettle_hmac_sha256_set_key(&ctx, key_len, key);
+        nettle_hmac_sha256_update(&ctx, salt_len, salt);
+        nettle_hmac_sha256_digest(&ctx, distilled_key.size(), distilled_key.data());
+        hkdf_expand(distilled_key.data(), distilled_key.size(), info, info_len, output, out_len);
     }
     else
     {
@@ -626,9 +526,9 @@ void respond_to_user_action(
 SecureByteBlock::SecureByteBlock(size_t size)
 {
     m_size = size;
-    m_data = std::calloc(1, size);
+    m_data = static_cast<char*>(std::calloc(1, size));
     if (!m_data)
-        throw std::bad_alloc("Calloc fails");
+        throw std::bad_alloc();
 }
 
 static void __attribute__((optnone)) erase_and_free(void* buffer, size_t size)
@@ -651,4 +551,5 @@ int constant_time_compare(const void* a, const void* b, size_t a_size, size_t b_
     for (size_t i = 0; i < a_size; ++i)
         rc |= aa[i] ^ bb[i];
     return rc;
+}
 }
