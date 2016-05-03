@@ -7,6 +7,7 @@
 #include <format.h>
 #include <fuse.h>
 #include <json.hpp>
+#include <nettle/pbkdf2.h>
 #include <tclap/CmdLine.h>
 
 #include <algorithm>
@@ -32,8 +33,6 @@ namespace
 static const char* VERSION_HEADER = "version=1";
 static const char* CONFIG_FILE_NAME = ".securefs.json";
 static const char* CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
-static const unsigned MIN_ITERATIONS = 20000;
-static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 4000;
 
@@ -244,15 +243,18 @@ nlohmann::json generate_config(int version,
     nlohmann::json config;
     config["version"] = version;
     securefs::key_type key_to_encrypt, encrypted_master_key;
-    config["iterations"] = securefs::pbkdf_hmac_sha256(password,
-                                                       pass_len,
-                                                       salt.data(),
-                                                       salt.size(),
-                                                       rounds ? rounds : MIN_ITERATIONS,
-                                                       rounds ? 0 : MIN_DERIVE_SECONDS,
-                                                       key_to_encrypt.data(),
-                                                       key_to_encrypt.size());
+    if (rounds == 0)
+        rounds = 400000;
+    config["iterations"] = rounds;
     config["salt"] = securefs::hexify(salt);
+
+    nettle_pbkdf2_hmac_sha256(pass_len,
+                              static_cast<const byte*>(password),
+                              rounds,
+                              salt.size(),
+                              salt.data(),
+                              key_to_encrypt.size(),
+                              key_to_encrypt.data());
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
@@ -323,14 +325,13 @@ bool parse_config(const nlohmann::json& config,
     parse_hex(mac_hex, mac, sizeof(mac));
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
 
-    pbkdf_hmac_sha256(password,
-                      pass_len,
-                      salt.data(),
-                      salt.size(),
-                      iterations,
-                      0,
-                      key_to_encrypt_master_key.data(),
-                      key_to_encrypt_master_key.size());
+    nettle_pbkdf2_hmac_sha256(pass_len,
+                              static_cast<const byte*>(password),
+                              iterations,
+                              salt.size(),
+                              salt.data(),
+                              key_to_encrypt_master_key.size(),
+                              key_to_encrypt_master_key.data());
 
     return aes_gcm_decrypt(encrypted_key.data(),
                            encrypted_key.size(),
