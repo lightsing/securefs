@@ -305,8 +305,11 @@ bool aes_gcm_decrypt(const byte* ciphertext,
     }
     std::array<byte, GCM_DIGEST_SIZE> digest;
     nettle_gcm_aes256_digest(&ctx, digest.size(), digest.data());
-    return constant_time_compare(
-        mac, digest.data(), std::min(digest.size(), mac_len), std::min(digest.size(), mac_len)) == 0;
+    return constant_time_compare(mac,
+                                 digest.data(),
+                                 std::min(digest.size(), mac_len),
+                                 std::min(digest.size(), mac_len))
+        == 0;
 }
 
 void generate_random(byte* data, size_t size)
@@ -343,24 +346,25 @@ static void hkdf_expand(const byte* distilled_key,
     while (i + j < out_len)
     {
         nettle_hmac_sha256_update(&ctx, j, out + i);
-        nettle_hmac_sha256_update(&ctx, info_len, info);
+        if (info_len > 0)
+            nettle_hmac_sha256_update(&ctx, info_len, info);
         nettle_hmac_sha256_update(&ctx, sizeof(counter), &counter);
         ++counter;
 
         auto left_size = out_len - i - j;
+        i += j;
         if (left_size >= SHA256_DIGEST_SIZE)
         {
-            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out + i + j);
+            nettle_hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, out + i);
             j = SHA256_DIGEST_SIZE;
         }
         else
         {
             std::array<byte, SHA256_DIGEST_SIZE> buffer;
             nettle_hmac_sha256_digest(&ctx, buffer.size(), buffer.data());
-            memcpy(out + i + j, buffer.data(), left_size);
+            memcpy(out + i, buffer.data(), left_size);
             j = left_size;
         }
-        i += j;
     }
 }
 
@@ -377,8 +381,8 @@ void hkdf(const byte* key,
     {
         std::array<byte, SHA256_DIGEST_SIZE> distilled_key;
         hmac_sha256_ctx ctx;
-        nettle_hmac_sha256_set_key(&ctx, key_len, key);
-        nettle_hmac_sha256_update(&ctx, salt_len, salt);
+        nettle_hmac_sha256_set_key(&ctx, salt_len, salt);
+        nettle_hmac_sha256_update(&ctx, key_len, key);
         nettle_hmac_sha256_digest(&ctx, distilled_key.size(), distilled_key.data());
         hkdf_expand(distilled_key.data(), distilled_key.size(), info, info_len, output, out_len);
     }
