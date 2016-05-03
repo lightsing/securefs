@@ -13,6 +13,7 @@
 #include <string.h>
 #include <time.h>
 #include <vector>
+#include <cstring>
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -692,8 +693,8 @@ SecureByteBlock::SecureByteBlock(size_t size)
 
 static void NO_OPTIMIZATION erase_and_free(void* buffer, size_t size)
 {
-    std::memset(buffer, 0xff, size);
-    std::free(buffer);
+    memset(buffer, 0xff, size);
+    free(buffer);
 }
 
 SecureByteBlock::~SecureByteBlock() { erase_and_free(m_data, m_size); }
