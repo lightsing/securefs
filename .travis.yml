@@ -6,6 +6,6 @@ matrix:
       sudo: required
       install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
     - os: osx
-      install: "brew update && sudo brew cask install osxfuse"
+      install: "brew update && sudo brew cask install osxfuse && sudo reboot"
       sudo: required
 script: "cmake . && make -j4 && ctest -V"
